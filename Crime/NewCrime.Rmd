@@ -1,0 +1,353 @@
+---
+title: "LBBIP3"
+author: "Dimas Aditya"
+date: "2024-06-22"
+output: html_document
+source: https://www.kaggle.com/datasets/faysal1998/analyzing-crime-trends
+---
+```{r}
+#Data Preparation
+library(dplyr)
+library(lubridate)
+library(scales)
+library(tidyr)
+#visualisasi
+library(ggplot2)
+library(ggpubr)
+library(plotly)
+library(glue)
+library(treemapify)
+library(dygraphs)
+library(viridis)
+library(hrbrthemes)
+#Exporting Plot Statis
+library(ggpubr)
+library(xts)
+
+
+```
+
+```{r}
+base <-read.csv("data_input/Crime.csv")
+base
+```
+
+```{r}
+glimpse(base)
+```
+
+```{r}
+colSums(is.na(base))
+```
+
+```{r}
+base %>% 
+  is.na() %>% 
+  colSums()
+```
+
+```{r}
+anyNA(base)
+```
+```{r}
+base1 <- base %>%
+  mutate(across(where(is.character), ~na_if(.,"")))
+
+```
+
+```{r}
+base2 <- base1 %>%
+  mutate(
+    Last.outcome.category = replace_na(Last.outcome.category, "Status update unavailable"),
+    Location = replace_na(Location, "No Location")
+  )
+```
+
+```{r}
+base3 <- select(.data = base2, Crime.type, Last.outcome.category, Month, Location)
+base3
+```
+
+
+```{r}
+base4 <- base3 %>%
+  mutate(
+    Crime.type = as.factor(Crime.type),
+    Last.outcome.category = as.factor(Last.outcome.category),
+    Location = as.factor(Location),
+    Month = ymd(paste0(Month, "-01"))
+  )
+base4
+```
+
+
+```{r}
+crime_count <- base4 %>% 
+  #Mengelompokan
+  group_by(Crime.type) %>% 
+  #Menghitung
+  summarise(count = n()) %>% 
+  #Ungroupping
+  ungroup() %>% 
+  #Mengurutkan
+  arrange(desc(count)) %>% 
+  head(10)
+crime_count
+```
+```{r}
+str(crime_count)
+```
+
+```{r}
+outcome_count <- base4 %>%
+  #Mengelompokan
+  group_by(Last.outcome.category, Crime.type) %>% 
+  #Menghitung
+  summarise(count = n()) %>% 
+  #Ungroupping
+  ungroup() %>% 
+  #Mengurutkan
+  arrange(-count) 
+outcome_count
+```
+
+
+
+
+
+
+```{r}
+outcome_count <-outcome_count %>% 
+mutate(labeling = glue ("Category : {Crime.type}
+                          Count : {count}"))
+```
+
+
+
+
+```{r}
+outcome_count <-outcome_count %>% 
+mutate(labeling = glue ("Category : {Crime.type}
+                          Count : {count}"))
+plot1 <- ggplot(outcome_count, aes(x = count, y = reorder(Last.outcome.category, count), fill = count, text = labeling)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Crime Outcomes by Type",
+       x = "Count",
+       y = "Last Outcome Category") +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+ggplotly(plot1, tooltip = "text")
+
+```
+
+
+
+
+
+
+```{r}
+loc_count <- base4 %>%
+  #Mengelompokan
+  group_by(Location, Month) %>% 
+  #Menghitung
+  summarise(count = n()) %>% 
+  #Ungroupping
+  ungroup() %>% 
+  #Mengurutkan
+  arrange(-count) %>% 
+  head(10)
+loc_count
+```
+
+
+```{r}
+crime_month <- base4 %>%
+  #Mengelompokan
+  group_by(Month) %>%
+  #Menghitung
+  summarise(count = n()) %>%
+  #Ungroupping
+  ungroup() %>%
+  #Mengurutkan
+  arrange(-count)
+crime_month
+```
+
+
+```{r}
+crime_pivot <- base4 %>% 
+  #Filter
+  #Merubah bentuk ke long format
+  pivot_longer(cols = c(Crime.type, Last.outcome.category),
+               names_to = "variable",
+               values_to = "values")
+crime_pivot
+```
+
+```{r}
+crime_count1 <- crime_pivot %>% 
+  count(Month, variable, values)
+crime_count1
+```
+
+```{r}
+  # For reproducibility
+data <- tibble(
+  Location = sample(letters, 155369, replace = TRUE),  # Replace with your actual Location data
+  Month = sample(seq(as.Date('2020/01/01'), as.Date('2023/12/31'), by = "month"), 155369, replace = TRUE),
+  count = round(runif(155369, min = 500, max = 1000))  # Replace with your actual count data
+)
+
+loc_count <- loc_count %>% 
+  mutate(labeling = glue ("Location : {Location}
+                          Count : {count}"))
+
+# Most basic bubble plot with your data
+plot4 <- loc_count %>%
+  ggplot(aes(x = Month, y = count, size = count, fill = Location, text = labeling)) +
+  geom_point(alpha = 0.5, shape = 21, color = "black") +
+  scale_size(range = c(1, 10), name = "Count") +
+  scale_fill_viridis(discrete = TRUE, guide = FALSE, option = "b") +
+  theme_ipsum() +
+  theme(legend.position = "none") +
+  ylab("Count") +
+  xlab(NULL)
+
+
+
+ggplotly(plot4, tooltip = "text")
+```
+
+```{r}
+
+don <- xts(x = crime_month$count, order.by = crime_month$Month)
+
+# Menyusun plot dengan konfigurasi yang telah ada
+plot1 <- dygraph(don) %>%
+  dyOptions(labelsUTC = TRUE, fillGraph = TRUE, fillAlpha = 0.1, drawGrid = FALSE, colors = "#34d8eb") %>%
+  dyRangeSelector() %>%
+  dyCrosshair(direction = "vertical") %>%
+  dyHighlight(highlightCircleSize = 5, highlightSeriesBackgroundAlpha = 0.2, hideOnMouseOut = FALSE) %>%
+  dyRoller(rollPeriod = 1)
+plot1
+
+```
+
+```{r}
+crime_count <- crime_count %>% 
+  mutate(labeling = glue ("Category : {Crime.type}
+                          Count : {count}"))
+
+plot2<- ggplot(data = crime_count, aes(x = count,
+                                      #mengurutkan kolom (a) yang diurutkan berdasarkan kolom yang memiliki nilai(b) 
+                                      y = reorder(Crime.type, count), text = labeling)) +
+  geom_col(aes(fill = count)) +
+  scale_fill_gradient(low = "#21918c", high = "#fde725") +
+  labs(title = "Crime Rate Type in UK",
+       x = "Crime Count",
+         y = NULL) +
+  theme_classic() +
+  theme(legend.position = "none")
+
+
+
+ggplotly(plot2, tooltip = "text")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+crime_count1 <- crime_count1 %>% 
+  mutate(labeling1 = glue ("Category : {values}
+                          Count : {n}"))
+crime_count1
+plot3 <- ggplot(crime_count1, aes(x = Month, y = n, fill = values, group = values, text = labeling1)) +
+  geom_area(alpha = 0.4, position = 'identity') +
+  scale_fill_viridis(discrete = TRUE, guide = FALSE, option = "b")+
+  facet_wrap(~ variable) +
+  labs(title = "Crime and Outcome Comparasion",
+       x = NULL,
+       y = NULL) +
+  theme_light() +
+  theme(legend.position = "none")
+ggplotly(plot3, tooltip = "text")
+```
+
+
+```{r}
+  # For reproducibility
+data <- tibble(
+  Location = sample(letters, 155369, replace = TRUE),  # Replace with your actual Location data
+  Month = sample(seq(as.Date('2020/01/01'), as.Date('2023/12/31'), by = "month"), 155369, replace = TRUE),
+  count = round(runif(155369, min = 500, max = 1000))  # Replace with your actual count data
+)
+
+loc_count <- loc_count %>% 
+  mutate(labeling = glue ("Location : {Location}
+                          Count : {count}"))
+
+# Most basic bubble plot with your data
+plot4 <- loc_count %>%
+  ggplot(aes(x = Month, y = count, size = count, fill = Location, text = labeling)) +
+  geom_point(alpha = 0.5, shape = 21, color = "black") +
+  scale_size(range = c(1, 10), name = "Count") +
+  scale_fill_viridis(discrete = TRUE, guide = FALSE, option = "b") +
+  theme_ipsum() +
+  theme(legend.position = "none") +
+  ylab("Count") +
+  xlab(NULL)
+
+
+
+ggplotly(plot4, tooltip = "text")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
